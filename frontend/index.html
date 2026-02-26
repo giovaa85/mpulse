@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MarketPulse Terminal</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+  <link rel="stylesheet" href="/assets/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- Login page (shown when not authenticated) -->
+<div id="login-page" style="display:none">
+  <div class="login-card">
+    <div class="login-brand">
+      <h1>📈 MarketPulse</h1>
+      <p>Local Market Intelligence Terminal</p>
+    </div>
+    <form id="login-form">
+      <div class="form-group">
+        <label class="form-label" for="login-user">Username</label>
+        <input class="form-control" id="login-user" type="text" autocomplete="username"
+               placeholder="admin or demo" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="login-pass">Password</label>
+        <input class="form-control" id="login-pass" type="password" autocomplete="current-password"
+               placeholder="Password" required/>
+      </div>
+      <div id="login-error" style="color:var(--neg);font-size:12px;margin-bottom:10px;display:none"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
+        Sign In
+      </button>
+    </form>
+    <p style="text-align:center;margin-top:16px;font-size:12px;color:var(--text-muted)">
+      Demo credentials: <code>demo / demo</code> &nbsp;|&nbsp; <code>admin / admin</code>
+    </p>
+  </div>
+</div>
+
+<!-- Main app shell (shown when authenticated) -->
+<div id="app-shell" style="display:none">
+
+  <!-- Top bar -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-icon">📈</span>
+      MarketPulse Terminal
+    </div>
+    <span class="spacer"></span>
+    <div class="ws-indicator" id="ws-dot" title="WebSocket status"></div>
+    <div class="user-info">
+      <span id="topbar-user">—</span>
+      <button class="btn-sm" id="btn-logout">Sign out</button>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <nav id="sidebar" role="navigation" aria-label="Main navigation">
+    <div class="nav-section">Markets</div>
+    <button class="nav-item" data-page="dashboard" tabindex="0">
+      <span class="nav-icon">🏠</span> Dashboard
+    </button>
+    <button class="nav-item" data-page="watchlists" tabindex="0">
+      <span class="nav-icon">⭐</span> Watchlists
+    </button>
+
+    <div class="nav-section">Personal</div>
+    <button class="nav-item" data-page="portfolio" tabindex="0">
+      <span class="nav-icon">💼</span> Portfolio
+    </button>
+    <button class="nav-item" data-page="alerts" tabindex="0">
+      <span class="nav-icon">🔔</span> Alerts
+    </button>
+
+    <div class="nav-section">Account</div>
+    <button class="nav-item" data-page="settings" tabindex="0">
+      <span class="nav-icon">⚙️</span> Settings
+    </button>
+    <button class="nav-item" id="nav-admin" data-page="debug" tabindex="0" style="display:none">
+      <span class="nav-icon">🔧</span> Debug
+    </button>
+  </nav>
+
+  <!-- Page content -->
+  <main id="page-content" role="main" aria-live="polite"></main>
+
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" aria-live="assertive" aria-atomic="true"></div>
+
+<script type="module" src="/assets/app.js"></script>
+</body>
+</html>
