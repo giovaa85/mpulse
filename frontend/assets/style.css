@@ -219,8 +219,154 @@ input, select, textarea { font-family: inherit; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-@media (max-width: 1200px) { .grid-5 { grid-template-columns: repeat(3, 1fr); } }
+/* Dashboard 3-column layout */
+.dash-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+/* Column header with icon */
+.col-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.col-header-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.col-header-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Best/Worst section inside a column */
+.rank-section { margin-bottom: 12px; }
+.rank-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.rank-section-label.best  { color: var(--pos); background: rgba(63,185,80,.12); }
+.rank-section-label.worst { color: var(--neg); background: rgba(248,81,73,.12); }
+
+/* Rank rows */
+.rank-row {
+  display: grid;
+  grid-template-columns: 16px 1fr 46px 46px 46px;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .1s;
+  border-radius: 4px;
+}
+.rank-row:last-child { border-bottom: none; }
+.rank-row:hover { background: var(--surface2); }
+.rank-num {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-align: center;
+}
+.rank-name {
+  min-width: 0;
+}
+.rank-name strong {
+  font-size: 12px;
+  font-weight: 700;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rank-name span {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Period cell: value + label stacked */
+.rank-period {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  flex-shrink: 0;
+}
+.rp-val {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.rp-lbl {
+  font-size: 9px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  line-height: 1;
+}
+
+/* Portfolio summary strip */
+.dash-pf-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.dash-pf-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.dash-pf-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 2px;
+}
+.dash-pf-value {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Crypto compact list */
+.crypto-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.crypto-row:last-child { border-bottom: none; }
+.crypto-rank { font-size: 10px; color: var(--text-dim); width: 14px; text-align:center; flex-shrink:0; }
+.crypto-img-sm { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
+.crypto-info { flex: 1; min-width: 0; }
+.crypto-info strong { font-size: 12px; font-weight: 700; }
+.crypto-info span { font-size: 10px; color: var(--text-muted); margin-left: 3px; }
+.crypto-price-col { text-align: right; flex-shrink: 0; }
+.crypto-price-col .price-val { font-size: 11px; font-weight: 600; display: block; }
+.crypto-price-col .pct-val  { font-size: 11px; font-weight: 700; }
+
+@media (max-width: 1200px) { .grid-5 { grid-template-columns: repeat(3, 1fr); } .dash-cols { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 900px)  { .grid-4, .grid-5 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 750px)  { .dash-cols { grid-template-columns: 1fr; } }
 @media (max-width: 650px)  {
   #app-shell { grid-template-columns: 1fr; }
   #sidebar { display: none; }
@@ -509,6 +655,11 @@ table.data-table {
 .autocomplete-item:hover { background: var(--surface2); }
 .autocomplete-item .ac-ticker { font-weight: 700; color: var(--text); min-width: 60px; }
 .autocomplete-item .ac-name   { color: var(--text-muted); font-size: 12px; }
+.autocomplete-item .ac-price  { margin-left: auto; font-size: 12px; }
+.ac-loading { color: var(--text-muted); font-style: italic; cursor: default; }
+.ac-loading:hover { background: none; }
+.ac-unverified .ac-ticker { color: var(--accent); }
+.ac-unverified .ac-name   { color: var(--text-dim); font-style: italic; }
 
 /* ── Tabs ──────────────────────────────────────────────────────────────────── */
 .tabs {

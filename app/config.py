@@ -23,13 +23,64 @@ class Settings(BaseSettings):
     CRYPTO_TTL: int = 60
 
     # Market data — Stooq tickers
-    INDICES: list = ["^SPX", "^NDX", "^DAX", "^UKX", "^CAC"]
+    INDICES: list = [
+        "^SPX", "^NDX", "^DJI", "^DAX", "^UKX", "^CAC",
+        "^IBEX", "^MIB", "^AEX", "^SMI", "^N225", "^HSI",
+    ]
     INDEX_NAMES: dict = {
-        "^SPX": "S&P 500",
-        "^NDX": "NASDAQ-100",
-        "^DAX": "DAX",
-        "^UKX": "FTSE 100",
-        "^CAC": "CAC 40",
+        "^SPX":  "S&P 500",
+        "^NDX":  "NASDAQ-100",
+        "^DJI":  "Dow Jones",
+        "^DAX":  "DAX",
+        "^UKX":  "FTSE 100",
+        "^CAC":  "CAC 40",
+        "^IBEX": "IBEX 35",
+        "^MIB":  "FTSE MIB",
+        "^AEX":  "AEX",
+        "^SMI":  "SMI",
+        "^N225": "Nikkei 225",
+        "^HSI":  "Hang Seng",
+    }
+
+    # Top stocks to track for best/worst dashboard panel (USA + EU blue chips)
+    TOP_STOCKS: list = [
+        # USA
+        "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
+        "META", "TSLA", "AVGO", "JPM", "V",
+        "UNH", "XOM", "LLY", "JNJ", "WMT",
+        # Europa
+        "ASML.NL", "SAP.DE", "SIE.DE", "MC.FR",
+        "NESN.SW", "NOVN.SW", "AIR.FR", "AZN.UK",
+        "HSBA.UK", "ENI.IT",
+    ]
+    TOP_STOCK_NAMES: dict = {
+        # USA
+        "AAPL":    "Apple",
+        "MSFT":    "Microsoft",
+        "NVDA":    "NVIDIA",
+        "AMZN":    "Amazon",
+        "GOOGL":   "Alphabet",
+        "META":    "Meta",
+        "TSLA":    "Tesla",
+        "AVGO":    "Broadcom",
+        "JPM":     "JPMorgan",
+        "V":       "Visa",
+        "UNH":     "UnitedHealth",
+        "XOM":     "ExxonMobil",
+        "LLY":     "Eli Lilly",
+        "JNJ":     "J&J",
+        "WMT":     "Walmart",
+        # Europa
+        "ASML.NL": "ASML",
+        "SAP.DE":  "SAP",
+        "SIE.DE":  "Siemens",
+        "MC.FR":   "LVMH",
+        "NESN.SW": "Nestlé",
+        "NOVN.SW": "Novartis",
+        "AIR.FR":  "Airbus",
+        "AZN.UK":  "AstraZeneca",
+        "HSBA.UK": "HSBC",
+        "ENI.IT":  "ENI",
     }
 
     # Rate limiting for login (per IP)

@@ -100,22 +100,24 @@ def add_item(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Validate by fetching a live quote; surface errors to the user
-    q = get_quote(ticker, db)
-    if q.get("stale") and q.get("price") is None:
-        raise HTTPException(status_code=422, detail=q.get("stale_reason") or f"Could not fetch data for {ticker}")
-
     # Check duplicate
     existing = db.query(WatchlistItem).filter(
         WatchlistItem.watchlist_id == wl.id,
         WatchlistItem.symbol_id == sym.id,
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail=f"{ticker} already in watchlist")
+        raise HTTPException(status_code=400, detail=f"{ticker} è già in watchlist")
 
     item = WatchlistItem(watchlist_id=wl.id, symbol_id=sym.id)
     db.add(item)
     db.commit()
+
+    # Try to fetch a quote in background (non-blocking); if it fails the price shows as stale
+    try:
+        get_quote(ticker, db)
+    except Exception:
+        pass
+
     return {"ticker": sym.ticker, "name": sym.name}
 
 

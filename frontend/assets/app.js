@@ -337,30 +337,106 @@ document.getElementById('login-form')?.addEventListener('submit', async (e) => {
 document.getElementById('btn-logout')?.addEventListener('click', logout);
 
 // ── DASHBOARD PAGE ────────────────────────────────────────────────────────────
+// Show short ticker (strip exchange suffix like .DE, .NL, .FR, .UK, .IT, .SW)
+function _shortTicker(ticker) {
+  return ticker.replace(/\.[A-Z]{2,3}$/, '');
+}
+
+function _rankRows(items, n = 5) {
+  return items.slice(0, n).map((it, i) => `
+    <div class="rank-row" onclick="navigate('symbol','${it.ticker}')" title="${it.ticker}">
+      <span class="rank-num">${i + 1}</span>
+      <span class="rank-name">
+        <strong>${_shortTicker(it.ticker)}</strong>
+        <span>${it.name || ''}</span>
+      </span>
+      <span class="rank-period">
+        <span class="rp-val ${fmt.pctClass(it.change_pct)}">${fmt.pct(it.change_pct)}</span>
+        <span class="rp-lbl">24H</span>
+      </span>
+      <span class="rank-period">
+        <span class="rp-val ${fmt.pctClass(it.return_1m)}">${it.return_1m != null ? fmt.pct(it.return_1m) : '—'}</span>
+        <span class="rp-lbl">1M</span>
+      </span>
+      <span class="rank-period">
+        <span class="rp-val ${fmt.pctClass(it.return_1y)}">${it.return_1y != null ? fmt.pct(it.return_1y) : '—'}</span>
+        <span class="rp-lbl">1A</span>
+      </span>
+    </div>
+  `).join('');
+}
+
+function _bestWorstSection(data) {
+  if (!data || !data.length) return `<p class="muted" style="font-size:12px">No data.</p>`;
+  const valid = data.filter(d => d.change_pct != null);
+  const sorted = [...valid].sort((a, b) => b.change_pct - a.change_pct);
+  const best  = sorted.slice(0, 5);
+  const worst = sorted.slice(-5).reverse();
+  return `
+    <div class="rank-section">
+      <span class="rank-section-label best">▲ Migliori</span>
+      ${_rankRows(best)}
+    </div>
+    <div class="rank-section" style="margin-top:12px">
+      <span class="rank-section-label worst">▼ Peggiori</span>
+      ${_rankRows(worst)}
+    </div>
+  `;
+}
+
 async function renderDashboard(container) {
+  const skelCol = `
+    <div class="card">
+      <div style="height:14px;width:60%;background:var(--surface3);border-radius:4px;margin-bottom:16px"></div>
+      ${skelRows(5)}
+      <div style="height:12px;width:40%;background:var(--surface3);border-radius:4px;margin:14px 0 8px"></div>
+      ${skelRows(5)}
+    </div>`;
+
   container.innerHTML = `
     <div class="page-header">
       <h1 class="page-title">Dashboard <small>Market Overview</small></h1>
       <button class="btn btn-ghost btn-xs" id="dash-refresh">↻ Refresh</button>
     </div>
-    <div class="section-title">Indices</div>
-    <div class="grid-5" id="indices-grid">${skelCards(5, 85)}</div>
-    <div style="margin-top:20px">
-      <div class="chart-wrap">
-        <div class="chart-title">Daily Change % — Major Indices</div>
-        <canvas id="indices-chart" height="120"></canvas>
+
+    <div class="dash-cols">
+      <div>
+        <div class="col-header">
+          <span class="col-header-icon">📊</span>
+          <span class="col-header-title">Listini</span>
+        </div>
+        <div class="card" id="col-indices">${skelRows(10)}</div>
+      </div>
+      <div>
+        <div class="col-header">
+          <span class="col-header-icon">🏢</span>
+          <span class="col-header-title">Titoli Azionari</span>
+        </div>
+        <div class="card" id="col-stocks">${skelRows(10)}</div>
+      </div>
+      <div>
+        <div class="col-header">
+          <span class="col-header-icon">₿</span>
+          <span class="col-header-title">Criptovalute</span>
+        </div>
+        <div class="card" id="col-crypto">${skelRows(10)}</div>
       </div>
     </div>
-    <div class="section-title" style="margin-top:24px">Cryptocurrency (Top 10)</div>
-    <div class="card" id="crypto-wrap">${skelRows(5)}</div>
+
     <div class="grid-2" style="margin-top:24px">
       <div>
-        <div class="section-title">My Watchlist</div>
-        <div class="card" id="dash-watchlist">${skelRows(4)}</div>
+        <div class="col-header">
+          <span class="col-header-icon">⭐</span>
+          <span class="col-header-title">Watchlist</span>
+        </div>
+        <div class="card" id="dash-watchlist">${skelRows(5)}</div>
       </div>
       <div>
-        <div class="section-title">Recent Alerts</div>
-        <div class="card" id="dash-alerts">${skelRows(3)}</div>
+        <div class="col-header">
+          <span class="col-header-icon">💼</span>
+          <span class="col-header-title">Portfolio</span>
+        </div>
+        <div class="card" id="dash-portfolio">${skelRows(5)}</div>
       </div>
     </div>
   `;
@@ -371,116 +447,159 @@ async function renderDashboard(container) {
   });
 
   // Parallel data fetch
-  const [markets, crypto, watchlists, events] = await Promise.allSettled([
+  const [markets, stocks, crypto, watchlists, portfolios] = await Promise.allSettled([
     api.get('/api/markets/overview'),
+    api.get('/api/stocks/top'),
     api.get('/api/crypto/overview'),
     api.get('/api/watchlists'),
-    api.get('/api/alerts/events?limit=10'),
+    api.get('/api/portfolios'),
   ]);
 
-  // Indices
-  const indicesGrid = document.getElementById('indices-grid');
+  // Column 1 — Indices best/worst
+  const colIndices = document.getElementById('col-indices');
   if (markets.status === 'fulfilled') {
-    const data = markets.value.data;
-    indicesGrid.innerHTML = data.map(idx => `
-      <div class="card index-card" data-ticker="${idx.ticker}"
-           onclick="navigate('symbol','${idx.ticker}')" style="cursor:pointer"
-           tabindex="0" role="button" aria-label="${idx.name}">
-        <div class="card-title">${idx.name}</div>
-        <div class="ticker muted">${idx.ticker}</div>
-        <div class="price">${fmt.price(idx.price, idx.currency)}</div>
-        <div class="change ${fmt.pctClass(idx.change_pct)}">${fmt.pct(idx.change_pct)}</div>
-        ${idx.stale ? '<span class="badge badge-stale">STALE</span>' : ''}
-      </div>
-    `).join('');
-
-    // Bar chart
-    const labels = data.map(i => i.name);
-    const values = data.map(i => i.change_pct ?? 0);
-    const colors = values.map(v => v >= 0 ? 'rgba(63,185,80,0.75)' : 'rgba(248,81,73,0.75)');
-    barChart('indices-chart', labels, values, colors);
+    colIndices.innerHTML = _bestWorstSection(markets.value.data);
   } else {
-    indicesGrid.innerHTML = `<div class="card" style="grid-column:1/-1;color:var(--neg)">Failed to load indices.</div>`;
+    colIndices.innerHTML = `<span class="neg">Impossibile caricare i listini.</span>`;
   }
 
-  // Crypto
-  const cryptoWrap = document.getElementById('crypto-wrap');
+  // Column 2 — Stocks best/worst
+  const colStocks = document.getElementById('col-stocks');
+  if (stocks.status === 'fulfilled') {
+    colStocks.innerHTML = _bestWorstSection(stocks.value.data);
+  } else {
+    colStocks.innerHTML = `<span class="neg">Impossibile caricare i titoli.</span>`;
+  }
+
+  // Column 3 — Crypto compact list
+  const colCrypto = document.getElementById('col-crypto');
   if (crypto.status === 'fulfilled') {
     const coins = crypto.value.data;
-    cryptoWrap.innerHTML = `
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th>#</th><th>Asset</th><th class="num">Price</th>
-            <th class="num">24h %</th><th class="num">Market Cap</th><th class="num">Vol 24h</th>
-          </tr></thead>
-          <tbody>
-            ${coins.map((c, i) => `
-              <tr>
-                <td class="muted">${i + 1}</td>
-                <td>
-                  ${c.image ? `<img class="crypto-img" src="${c.image}" alt="${c.symbol}" loading="lazy"> ` : ''}
-                  <strong>${c.symbol}</strong>
-                  <span class="muted" style="font-size:11px"> ${c.name}</span>
-                  ${c.stale ? '<span class="badge badge-stale">STALE</span>' : ''}
-                </td>
-                <td class="num">${fmt.price(c.price_usd, 'USD')}</td>
-                <td class="num ${fmt.pctClass(c.change_24h_pct)}">${fmt.pct(c.change_24h_pct)}</td>
-                <td class="num">${fmt.mcap(c.market_cap)}</td>
-                <td class="num">${fmt.mcap(c.volume_24h)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+    colCrypto.innerHTML = coins.map((c, i) => `
+      <div class="crypto-row">
+        <span class="crypto-rank">${i + 1}</span>
+        ${c.image ? `<img class="crypto-img-sm" src="${c.image}" alt="${c.symbol}" loading="lazy">` : ''}
+        <span class="crypto-info">
+          <strong>${c.symbol}</strong>
+          <span>${c.name}</span>
+        </span>
+        <span class="crypto-price-col">
+          <span class="price-val">${fmt.price(c.price_usd, 'USD')}</span>
+          <span class="pct-val ${fmt.pctClass(c.change_24h_pct)}">${fmt.pct(c.change_24h_pct)}</span>
+        </span>
+        ${c.stale ? '<span class="badge badge-stale" style="font-size:9px">STALE</span>' : ''}
       </div>
-    `;
+    `).join('');
   } else {
-    cryptoWrap.innerHTML = `<span class="neg">Failed to load crypto data.</span>`;
+    colCrypto.innerHTML = `<span class="neg">Impossibile caricare le crypto.</span>`;
   }
 
-  // Mini watchlist
+  // ── Watchlist ──────────────────────────────────────────────────────────────
   const dashWl = document.getElementById('dash-watchlist');
   if (watchlists.status === 'fulfilled' && watchlists.value.length > 0) {
     const wl = watchlists.value[0];
-    dashWl.innerHTML = wl.items.length ? `
-      <div style="margin-bottom:8px;font-size:12px;font-weight:700;color:var(--text-muted)">${wl.name}</div>
-      <table class="data-table">
-        <thead><tr><th>Ticker</th><th class="num">Price</th><th class="num">Chg%</th></tr></thead>
-        <tbody>
-          ${wl.items.slice(0, 6).map(it => `
-            <tr>
-              <td><a href="#" onclick="event.preventDefault();navigate('symbol','${it.ticker}')"
-                     style="font-weight:600">${it.ticker}</a></td>
-              <td class="num">${fmt.price(it.price, it.currency)}</td>
-              <td class="num ${fmt.pctClass(it.change_pct)}">${fmt.pct(it.change_pct)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
-      <div style="margin-top:8px"><a href="#watchlists" style="font-size:12px">View all →</a></div>
-    ` : `<div class="empty-state" style="padding:20px">
-           <p>No items in <strong>${wl.name}</strong>. <a href="#watchlists">Add some →</a></p>
-         </div>`;
+    if (wl.items.length) {
+      dashWl.innerHTML = `
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">${escHtml(wl.name)}</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>Ticker</th><th>Nome</th>
+              <th class="num">Prezzo</th><th class="num">Var%</th>
+            </tr></thead>
+            <tbody>
+              ${wl.items.map(it => `
+                <tr style="cursor:pointer" onclick="navigate('symbol','${it.ticker}')">
+                  <td><strong>${it.ticker}</strong></td>
+                  <td class="muted" style="font-size:12px">${escHtml(it.name || '')}</td>
+                  <td class="num">${fmt.price(it.price, it.currency)}</td>
+                  <td class="num ${fmt.pctClass(it.change_pct)}">${fmt.pct(it.change_pct)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        ${watchlists.value.length > 1 ? `<div class="muted" style="font-size:11px;margin-top:6px">+${watchlists.value.length - 1} altre watchlist</div>` : ''}
+        <div style="margin-top:10px"><a href="#watchlists" style="font-size:12px">Vai alle Watchlist →</a></div>
+      `;
+    } else {
+      dashWl.innerHTML = `<div class="empty-state" style="padding:16px">
+        <p class="muted" style="font-size:13px">Nessun titolo in <strong>${escHtml(wl.name)}</strong>.</p>
+        <a href="#watchlists" style="font-size:12px">Aggiungi titoli →</a>
+      </div>`;
+    }
   } else if (watchlists.status === 'fulfilled') {
-    dashWl.innerHTML = `<div class="empty-state" style="padding:20px">
-      <p>No watchlists yet. <a href="#watchlists">Create one →</a></p>
+    dashWl.innerHTML = `<div class="empty-state" style="padding:16px">
+      <p class="muted" style="font-size:13px">Nessuna watchlist.</p>
+      <a href="#watchlists" style="font-size:12px">Crea una watchlist →</a>
     </div>`;
   } else {
-    dashWl.innerHTML = `<span class="neg">Failed to load watchlist.</span>`;
+    dashWl.innerHTML = `<span class="neg">Impossibile caricare la watchlist.</span>`;
   }
 
-  // Recent alerts
-  const dashAlerts = document.getElementById('dash-alerts');
-  if (events.status === 'fulfilled' && events.value.length > 0) {
-    dashAlerts.innerHTML = events.value.slice(0, 5).map(ev => `
-      <div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
-        <span class="warn">🔔</span>
-        <strong>${ev.ticker}</strong> — ${ev.message}
-        <div class="muted" style="font-size:11px">${fmt.date(ev.ts)}</div>
-      </div>
-    `).join('') + `<div style="margin-top:8px"><a href="#alerts" style="font-size:12px">View all →</a></div>`;
+  // ── Portfolio ──────────────────────────────────────────────────────────────
+  const dashPf = document.getElementById('dash-portfolio');
+  if (portfolios.status === 'fulfilled' && portfolios.value.length > 0) {
+    const pf = portfolios.value[0];
+    try {
+      const items = await api.get(`/api/portfolios/${pf.id}/holdings`);
+      const totVal  = items.reduce((s, h) => s + (h.current_value  ?? 0), 0) || null;
+      const totCost = items.reduce((s, h) => s + (h.total_cost     ?? 0), 0) || null;
+      const totPnl  = items.reduce((s, h) => s + (h.unrealized_pnl ?? 0), 0) || null;
+      const totPct  = (totCost && totPnl != null) ? (totPnl / totCost * 100) : null;
+
+      dashPf.innerHTML = `
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">${escHtml(pf.name)}</div>
+        <div class="dash-pf-summary">
+          <div class="dash-pf-stat">
+            <span class="dash-pf-label">Valore</span>
+            <span class="dash-pf-value">${fmt.price(totVal, pf.base_currency)}</span>
+          </div>
+          <div class="dash-pf-stat">
+            <span class="dash-pf-label">Investito</span>
+            <span class="dash-pf-value">${fmt.price(totCost, pf.base_currency)}</span>
+          </div>
+          <div class="dash-pf-stat">
+            <span class="dash-pf-label">P&L</span>
+            <span class="dash-pf-value ${fmt.pctClass(totPnl)}">${fmt.price(totPnl, pf.base_currency)}</span>
+          </div>
+          <div class="dash-pf-stat">
+            <span class="dash-pf-label">Rendimento</span>
+            <span class="dash-pf-value ${fmt.pctClass(totPct)}">${totPct != null ? fmt.pct(totPct) : '—'}</span>
+          </div>
+        </div>
+        ${items.length ? `
+        <div class="table-wrap" style="margin-top:12px">
+          <table class="data-table">
+            <thead><tr>
+              <th>Ticker</th><th class="num">Qtà</th>
+              <th class="num">Valore</th><th class="num">P&L%</th>
+            </tr></thead>
+            <tbody>
+              ${items.map(h => `
+                <tr style="cursor:pointer" onclick="navigate('symbol','${h.ticker}')">
+                  <td><strong>${h.ticker}</strong></td>
+                  <td class="num">${fmt.num(h.qty, 4)}</td>
+                  <td class="num">${fmt.price(h.current_value, pf.base_currency)}</td>
+                  <td class="num ${fmt.pctClass(h.unrealized_pnl_pct)}">${h.unrealized_pnl_pct != null ? fmt.pct(h.unrealized_pnl_pct) : '—'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>` : '<p class="muted" style="font-size:12px;margin-top:8px">Nessuna posizione aperta.</p>'}
+        ${portfolios.value.length > 1 ? `<div class="muted" style="font-size:11px;margin-top:6px">+${portfolios.value.length - 1} altri portfolio</div>` : ''}
+        <div style="margin-top:10px"><a href="#portfolio" style="font-size:12px">Vai al Portfolio →</a></div>
+      `;
+    } catch (_) {
+      dashPf.innerHTML = `<span class="neg">Impossibile caricare le posizioni.</span>`;
+    }
+  } else if (portfolios.status === 'fulfilled') {
+    dashPf.innerHTML = `<div class="empty-state" style="padding:16px">
+      <p class="muted" style="font-size:13px">Nessun portfolio.</p>
+      <a href="#portfolio" style="font-size:12px">Crea un portfolio →</a>
+    </div>`;
   } else {
-    dashAlerts.innerHTML = `<div class="empty-state" style="padding:20px"><p class="muted">No recent alerts.</p></div>`;
+    dashPf.innerHTML = `<span class="neg">Impossibile caricare il portfolio.</span>`;
   }
 }
 
@@ -534,14 +653,18 @@ function renderWatchlistTables(container, lists) {
       </div>
 
       <div style="display:flex;gap:8px;margin-bottom:4px;align-items:center" class="autocomplete-wrap">
-        <input class="form-control" id="ac-${wl.id}" placeholder="Ticker: SPY, IWDA.UK, ^SPX…" style="max-width:260px"
+        <input class="form-control" id="ac-${wl.id}" placeholder="Es: RACE.IT, VWCE.IT, AAPL, ^SPX…" style="max-width:300px"
                autocomplete="off" spellcheck="false"/>
-        <button class="btn btn-primary btn-xs" data-add-item="${wl.id}">+ Add</button>
+        <button class="btn btn-primary btn-xs" data-add-item="${wl.id}">+ Aggiungi</button>
         <div class="autocomplete-dropdown" id="acd-${wl.id}" style="display:none"></div>
       </div>
       <p class="muted" style="font-size:11px;margin-bottom:10px">
-        US stocks: <code>AAPL</code> &nbsp;·&nbsp; EU ETF: <code>IWDA.UK</code> / <code>EUNL.DE</code> &nbsp;·&nbsp; Indices: <code>^SPX</code>
-        &nbsp;·&nbsp; ISIN non supportati
+        Italia: <code>RACE.IT</code> <code>ISP.IT</code> <code>VWCE.IT</code>
+        &nbsp;·&nbsp; US: <code>AAPL</code>
+        &nbsp;·&nbsp; UK: <code>SHEL.UK</code>
+        &nbsp;·&nbsp; Germania: <code>SAP.DE</code>
+        &nbsp;·&nbsp; Indici: <code>^SPX</code>
+        &nbsp;·&nbsp; Puoi usare anche il formato Yahoo Finance: <code>RACE.MI</code>
       </p>
 
       ${wl.items.length === 0 ? '<p class="muted" style="font-size:13px">No symbols yet.</p>' : `
@@ -584,22 +707,42 @@ function renderWatchlistTables(container, lists) {
       clearTimeout(acTimer);
       const q = inp.value.trim();
       if (q.length < 1) { drop.style.display = 'none'; return; }
+
       acTimer = setTimeout(async () => {
+        // 1. Cerca nel DB locale
+        let items = [];
         try {
           const res = await api.get(`/api/symbols/search?q=${encodeURIComponent(q)}`);
-          if (!res.results.length) { drop.style.display = 'none'; return; }
-          drop.innerHTML = res.results.slice(0, 8).map(s =>
-            `<div class="autocomplete-item" data-ticker="${s.ticker}" tabindex="0">
-               <span class="ac-ticker">${s.ticker}</span>
-               <span class="ac-name">${escHtml(s.name || '')}</span>
-             </div>`
-          ).join('');
-          drop.style.display = 'block';
-          drop.querySelectorAll('.autocomplete-item').forEach(it => {
-            it.addEventListener('click', () => { inp.value = it.dataset.ticker; drop.style.display = 'none'; });
-          });
+          items = res.results || [];
         } catch (_) {}
-      }, 250);
+
+        // 2. Se DB vuoto, prova risoluzione live su Stooq
+        if (!items.length && q.length >= 2) {
+          drop.innerHTML = `<div class="autocomplete-item ac-loading">🔍 Cerco "${escHtml(q)}"…</div>`;
+          drop.style.display = 'block';
+          try {
+            const live = await api.get(`/api/symbols/resolve?ticker=${encodeURIComponent(q)}`);
+            items = [live];
+          } catch (_) {
+            // Ticker non trovato: offri comunque l'aggiunta diretta
+            items = [{ ticker: q.toUpperCase(), name: 'Aggiungi direttamente (non verificato)', _unverified: true }];
+          }
+        }
+
+        if (!items.length) { drop.style.display = 'none'; return; }
+
+        drop.innerHTML = items.slice(0, 8).map(s =>
+          `<div class="autocomplete-item${s._unverified ? ' ac-unverified' : ''}" data-ticker="${s.ticker}" tabindex="0">
+             <span class="ac-ticker">${s.ticker}</span>
+             <span class="ac-name">${escHtml(s.name || '')}</span>
+             ${s.price ? `<span class="ac-price muted">${fmt.price(s.price, s.currency)}</span>` : ''}
+           </div>`
+        ).join('');
+        drop.style.display = 'block';
+        drop.querySelectorAll('.autocomplete-item').forEach(it => {
+          it.addEventListener('click', () => { inp.value = it.dataset.ticker; drop.style.display = 'none'; });
+        });
+      }, 350);
     });
 
     inp?.addEventListener('blur', () => setTimeout(() => { drop.style.display = 'none'; }, 200));

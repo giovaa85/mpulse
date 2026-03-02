@@ -5,7 +5,7 @@ from ..auth import get_current_user
 from ..db import get_db
 from ..models import User
 from ..services.crypto import get_crypto_overview
-from ..services.market import get_markets_overview
+from ..services.market import get_markets_overview, get_top_stocks_overview
 
 router = APIRouter(prefix="/api", tags=["markets"])
 
@@ -17,6 +17,15 @@ def markets_overview(
     _user: User = Depends(get_current_user),
 ):
     data = get_markets_overview(db)
+    return {"data": data, "count": len(data)}
+
+
+@router.get("/stocks/top")
+def stocks_top(
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    data = get_top_stocks_overview(db)
     return {"data": data, "count": len(data)}
 
 
