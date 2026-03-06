@@ -69,6 +69,26 @@ _STOOQ_TO_YF_SUFFIX: dict[str, str] = {
     ".no": ".OL", ".fi": ".HE", ".uk": ".L",  ".au": ".AX",
     ".jp": ".T",  ".hk": ".HK", ".sw": ".SW", ".es": ".MC",
     ".de": ".DE", ".us": "",    # US: strip suffix for yfinance
+    ".f":  "=F",  # Commodity/financial futures (GC.F → GC=F)
+}
+
+# Stooq exchange suffix → ISO currency code
+_STOOQ_EXCHANGE_CURRENCY: dict[str, str] = {
+    ".us": "USD", ".f": "USD",
+    ".it": "EUR", ".de": "EUR", ".fr": "EUR", ".nl": "EUR",
+    ".be": "EUR", ".pt": "EUR", ".at": "EUR", ".fi": "EUR", ".es": "EUR",
+    ".uk": "GBP", ".sw": "CHF", ".jp": "JPY", ".hk": "HKD",
+    ".au": "AUD", ".se": "SEK", ".dk": "DKK", ".no": "NOK",
+}
+
+# Currency for index tickers (Stooq lowercase)
+_INDEX_CURRENCY: dict[str, str] = {
+    "^spx": "USD", "^ndx": "USD", "^dji": "USD",
+    "^dax": "EUR", "^cac": "EUR", "^ibex": "EUR", "^mib": "EUR", "^aex": "EUR",
+    "^ukx": "GBP",
+    "^smi": "CHF",
+    "^nkx": "JPY",
+    "^hsi": "HKD",
 }
 
 # Stooq index → Yahoo Finance index ticker
@@ -382,6 +402,12 @@ def get_quote(ticker: str, db: Session, force_refresh: bool = False) -> dict:
             log_fetch(db, cache_key, "cache", cache_hit=True)
             return _quote_to_dict(existing, sym)
 
+    # Negative cache: if last fetch failed recently, skip retry to avoid slow watchlist loads
+    if not force_refresh and existing and existing.price is None and existing.stale:
+        if (now - existing.ts).total_seconds() < settings.QUOTE_TTL:
+            log_fetch(db, cache_key, "cache", cache_hit=True)
+            return _quote_to_dict(existing, sym, stale=True, stale_reason="Dati non disponibili (tentativo precedente fallito)")
+
     t0 = time.perf_counter()
     since = datetime.utcnow() - timedelta(days=10)
     bars = None
@@ -411,10 +437,22 @@ def get_quote(ticker: str, db: Session, force_refresh: bool = False) -> dict:
             err = f"Stooq: {stooq_exc_msg}; yfinance: {yf_exc}"
             log_fetch(db, cache_key, "stooq+yf", cache_hit=False, duration_ms=ms, ok=False, error=err)
             logger.warning("All sources failed for %s", ticker)
+            # Cache the failure so subsequent calls within TTL don't retry (avoids slow watchlist loads)
+            stale_reason = stooq_exc_msg or str(yf_exc)
+            try:
+                if not existing:
+                    db.add(Quote(symbol_id=sym.id, ts=now, source="failed", stale=True))
+                    db.commit()
+                    existing = db.get(Quote, sym.id)
+                elif existing.price is None:
+                    existing.ts = now
+                    db.commit()
+            except Exception:
+                db.rollback()
             if existing and existing.price is not None:
-                return _quote_to_dict(existing, sym, stale=True, stale_reason=stooq_exc_msg or str(yf_exc))
+                return _quote_to_dict(existing, sym, stale=True, stale_reason=stale_reason)
             return {"ticker": sym.ticker, "name": sym.name, "stale": True,
-                    "stale_reason": stooq_exc_msg or str(yf_exc)}
+                    "stale_reason": stale_reason}
 
     # ── Save to DB ────────────────────────────────────────────────────────────
     try:
@@ -422,6 +460,17 @@ def get_quote(ticker: str, db: Session, force_refresh: bool = False) -> dict:
         sym.last_seen_at = now
         if resolved_suffix and sym.exchange != resolved_suffix:
             sym.exchange = resolved_suffix
+
+        # Update currency from resolved Stooq ticker suffix
+        stooq_lower = stooq_t.lower()
+        inferred_currency = _INDEX_CURRENCY.get(stooq_lower)
+        if not inferred_currency:
+            for sfx, cur in _STOOQ_EXCHANGE_CURRENCY.items():
+                if stooq_lower.endswith(sfx):
+                    inferred_currency = cur
+                    break
+        if inferred_currency and sym.currency != inferred_currency:
+            sym.currency = inferred_currency
 
         qdata = {k: p[k] for k in ("price", "change_abs", "change_pct", "open", "high", "low", "volume")}
         if existing:
@@ -437,7 +486,6 @@ def get_quote(ticker: str, db: Session, force_refresh: bool = False) -> dict:
 
         ms = int((time.perf_counter() - t0) * 1000)
         log_fetch(db, cache_key, source, cache_hit=False, duration_ms=ms, ok=True)
-        return _quote_to_dict(existing, sym)
     except Exception as exc:
         ms = int((time.perf_counter() - t0) * 1000)
         log_fetch(db, cache_key, source, cache_hit=False, duration_ms=ms, ok=False, error=str(exc))
@@ -445,6 +493,8 @@ def get_quote(ticker: str, db: Session, force_refresh: bool = False) -> dict:
         if existing and existing.price is not None:
             return _quote_to_dict(existing, sym, stale=True, stale_reason=str(exc))
         return {"ticker": sym.ticker, "name": sym.name, "stale": True, "stale_reason": str(exc)}
+
+    return _quote_to_dict(existing, sym)
 
 
 def _quote_to_dict(q: Quote, sym: Symbol, stale: bool = False, stale_reason: str = None) -> dict:
@@ -634,3 +684,14 @@ def get_watchlist_quotes(user_id: int, db: Session) -> list[dict]:
         quotes.append(get_quote(item.symbol.ticker, db))
         time.sleep(0.15)
     return quotes
+
+
+def get_commodities_overview(db: Session) -> list[dict]:
+    """Fetch quotes for all configured commodities (futures)."""
+    results = []
+    for ticker in settings.COMMODITIES:
+        q = get_quote(ticker, db)
+        q["name"] = settings.COMMODITY_NAMES.get(ticker, q.get("name", ticker))
+        results.append(q)
+        time.sleep(0.2)
+    return results

@@ -97,6 +97,40 @@ def _fetch_crypto_sync() -> list[dict]:
         return get_crypto_overview(db)
 
 
+def _prefetch_quotes_sync() -> None:
+    """Pre-populate quote cache for all configured tickers so dashboard loads instantly."""
+    import time as _time
+    from .config import settings
+    from .db import get_db_ctx
+    from .services.market import get_quote
+
+    tickers = list(settings.INDICES) + list(settings.TOP_STOCKS) + list(settings.COMMODITIES)
+    with get_db_ctx() as db:
+        for ticker in tickers:
+            try:
+                get_quote(ticker, db)
+                _time.sleep(0.3)
+            except Exception as exc:
+                logger.debug("Quote prefetch failed for %s: %s", ticker, exc)
+
+
+def _prefetch_history_sync() -> None:
+    """Pre-populate 1y history for all configured tickers so dashboard can show 1M/1Y returns."""
+    import time as _time
+    from .config import settings
+    from .db import get_db_ctx
+    from .services.market import get_history
+
+    tickers = list(settings.INDICES) + list(settings.TOP_STOCKS) + list(settings.COMMODITIES)
+    with get_db_ctx() as db:
+        for ticker in tickers:
+            try:
+                get_history(ticker, db, period="1y", interval="1d")
+                _time.sleep(0.3)
+            except Exception as exc:
+                logger.debug("History prefetch failed for %s: %s", ticker, exc)
+
+
 def _fetch_user_watchlist_sync(user_id: int) -> list[dict]:
     from .db import get_db_ctx
     from .services.market import get_watchlist_quotes
@@ -139,6 +173,32 @@ async def run_broadcaster() -> None:
             logger.error("Broadcaster error: %s", exc)
 
         await asyncio.sleep(settings.BROADCAST_INTERVAL)
+
+
+async def run_quote_prewarmer() -> None:
+    """At startup and every QUOTE_TTL*4, pre-fetch current quotes for all configured tickers."""
+    await asyncio.sleep(5)  # Start quickly so dashboard loads fast
+    while True:
+        try:
+            logger.info("Quote prewarmer started for all configured tickers…")
+            await asyncio.to_thread(_prefetch_quotes_sync)
+            logger.info("Quote prewarmer completed.")
+        except Exception as exc:
+            logger.error("Quote prewarmer error: %s", exc)
+        await asyncio.sleep(settings.QUOTE_TTL * 4)
+
+
+async def run_history_prefetcher() -> None:
+    """At startup and every HISTORY_TTL, pre-fetch 1y history for all configured tickers."""
+    await asyncio.sleep(8)  # Let the server fully start first
+    while True:
+        try:
+            logger.info("History prefetch started for all configured tickers…")
+            await asyncio.to_thread(_prefetch_history_sync)
+            logger.info("History prefetch completed.")
+        except Exception as exc:
+            logger.error("History prefetcher error: %s", exc)
+        await asyncio.sleep(settings.HISTORY_TTL)
 
 
 async def run_alert_checker() -> None:

@@ -59,7 +59,8 @@ function toast(msg, type = 'info', duration = 4000) {
 const fmt = {
   price: (v, currency) => {
     if (v == null) return '—';
-    const sym = currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '$';
+    const symbols = { EUR: '€', GBP: '£', CHF: 'Fr ', JPY: '¥', HKD: 'HK$', AUD: 'A$', SEK: 'kr ', DKK: 'kr ', NOK: 'kr ' };
+    const sym = symbols[currency] ?? '$';
     return sym + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   },
   pct: (v) => v == null ? '—' : (v >= 0 ? '+' : '') + Number(v).toFixed(2) + '%',
@@ -254,7 +255,8 @@ function handleAlertTriggered(payload) {
 
 // ── Router ────────────────────────────────────────────────────────────────────
 function navigate(page, params = {}) {
-  const hash = params.ticker ? `${page}/${params.ticker}` : page;
+  const ticker = typeof params === 'string' ? params : params.ticker;
+  const hash = ticker ? `${page}/${ticker}` : page;
   location.hash = hash;
 }
 
@@ -416,10 +418,10 @@ async function renderDashboard(container) {
       </div>
       <div>
         <div class="col-header">
-          <span class="col-header-icon">₿</span>
-          <span class="col-header-title">Criptovalute</span>
+          <span class="col-header-icon">🛢️</span>
+          <span class="col-header-title">Materie Prime</span>
         </div>
-        <div class="card" id="col-crypto">${skelRows(10)}</div>
+        <div class="card" id="col-commodities">${skelRows(10)}</div>
       </div>
     </div>
 
@@ -447,10 +449,10 @@ async function renderDashboard(container) {
   });
 
   // Parallel data fetch
-  const [markets, stocks, crypto, watchlists, portfolios] = await Promise.allSettled([
+  const [markets, stocks, commodities, watchlists, portfolios] = await Promise.allSettled([
     api.get('/api/markets/overview'),
     api.get('/api/stocks/top'),
-    api.get('/api/crypto/overview'),
+    api.get('/api/commodities/overview'),
     api.get('/api/watchlists'),
     api.get('/api/portfolios'),
   ]);
@@ -471,27 +473,25 @@ async function renderDashboard(container) {
     colStocks.innerHTML = `<span class="neg">Impossibile caricare i titoli.</span>`;
   }
 
-  // Column 3 — Crypto compact list
-  const colCrypto = document.getElementById('col-crypto');
-  if (crypto.status === 'fulfilled') {
-    const coins = crypto.value.data;
-    colCrypto.innerHTML = coins.map((c, i) => `
-      <div class="crypto-row">
-        <span class="crypto-rank">${i + 1}</span>
-        ${c.image ? `<img class="crypto-img-sm" src="${c.image}" alt="${c.symbol}" loading="lazy">` : ''}
-        <span class="crypto-info">
-          <strong>${c.symbol}</strong>
-          <span>${c.name}</span>
+  // Column 3 — Commodities compact list
+  const colCommodities = document.getElementById('col-commodities');
+  if (commodities.status === 'fulfilled') {
+    const items = commodities.value.data;
+    colCommodities.innerHTML = items.map(c => `
+      <div class="crypto-row" onclick="navigate('symbol','${c.ticker}')" style="cursor:pointer">
+        <span class="crypto-info" style="flex:1">
+          <strong>${c.name}</strong>
+          <span class="muted" style="font-size:10px">${c.ticker}</span>
         </span>
         <span class="crypto-price-col">
-          <span class="price-val">${fmt.price(c.price_usd, 'USD')}</span>
-          <span class="pct-val ${fmt.pctClass(c.change_24h_pct)}">${fmt.pct(c.change_24h_pct)}</span>
+          <span class="price-val">${fmt.price(c.price, 'USD')}</span>
+          <span class="pct-val ${fmt.pctClass(c.change_pct)}">${fmt.pct(c.change_pct)}</span>
         </span>
-        ${c.stale ? '<span class="badge badge-stale" style="font-size:9px">STALE</span>' : ''}
+        ${c.stale ? `<span class="badge badge-stale" style="font-size:9px" title="${c.stale_reason || 'Dati non disponibili'}">STALE</span>` : ''}
       </div>
     `).join('');
   } else {
-    colCrypto.innerHTML = `<span class="neg">Impossibile caricare le crypto.</span>`;
+    colCommodities.innerHTML = `<span class="neg">Impossibile caricare le materie prime.</span>`;
   }
 
   // ── Watchlist ──────────────────────────────────────────────────────────────
@@ -681,7 +681,10 @@ function renderWatchlistTables(container, lists) {
                 <td><a href="#" onclick="event.preventDefault();navigate('symbol','${it.ticker}')"
                        style="font-weight:700">${it.ticker}</a></td>
                 <td class="muted">${escHtml(it.name || '')}</td>
-                <td class="num col-price">${fmt.price(it.price, it.currency)}</td>
+                <td class="num col-price">
+                  ${fmt.price(it.price, it.currency)}
+                  ${it.stale ? `<span class="badge badge-stale" style="font-size:9px;vertical-align:middle;margin-left:3px" title="Dati non aggiornati — ricarica la pagina tra qualche minuto">!</span>` : ''}
+                </td>
                 <td class="num ${fmt.pctClass(it.change_abs)}">${it.change_abs != null ? fmt.price(it.change_abs, it.currency) : '—'}</td>
                 <td class="num col-chg ${fmt.pctClass(it.change_pct)}">${fmt.pct(it.change_pct)}</td>
                 <td class="muted">${it.currency || '—'}</td>

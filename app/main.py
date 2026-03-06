@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .db import init_db
 from .routers import alerts, auth, markets, ops, portfolios, settings as settings_router, symbols, watchlists, ws
-from .tasks import run_alert_checker, run_broadcaster
+from .tasks import run_alert_checker, run_broadcaster, run_history_prefetcher, run_quote_prewarmer
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
 
@@ -40,13 +40,19 @@ async def lifespan(_app: FastAPI):
     # Start background tasks
     broadcaster_task = asyncio.create_task(run_broadcaster())
     alert_task = asyncio.create_task(run_alert_checker())
+    history_task = asyncio.create_task(run_history_prefetcher())
+    quote_task = asyncio.create_task(run_quote_prewarmer())
     logger.info("Background tasks started. Open http://localhost:8000")
     yield
     broadcaster_task.cancel()
     alert_task.cancel()
+    history_task.cancel()
+    quote_task.cancel()
     try:
         await broadcaster_task
         await alert_task
+        await history_task
+        await quote_task
     except asyncio.CancelledError:
         pass
     logger.info("MarketPulse Terminal shut down.")

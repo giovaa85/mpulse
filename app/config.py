@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # Cache TTLs (seconds)
-    QUOTE_TTL: int = 60
+    QUOTE_TTL: int = 300  # 5 minutes (prewarmer keeps cache fresh)
     HISTORY_TTL: int = 900       # 15 minutes
     SYMBOL_METADATA_TTL: int = 604800  # 7 days
     CRYPTO_TTL: int = 60
@@ -81,6 +81,32 @@ class Settings(BaseSettings):
         "AZN.UK":  "AstraZeneca",
         "HSBA.UK": "HSBC",
         "ENI.IT":  "ENI",
+    }
+
+    # Commodities / Materie prime (Stooq futures tickers)
+    COMMODITIES: list = [
+        "GC.F",   # Oro
+        "SI.F",   # Argento
+        "CL.F",   # Petrolio WTI
+        "NG.F",   # Gas Naturale
+        "HG.F",   # Rame
+        "PL.F",   # Platino
+        "PA.F",   # Palladio
+        "ZW.F",   # Frumento
+        "ZC.F",   # Mais
+        "ZS.F",   # Soia
+    ]
+    COMMODITY_NAMES: dict = {
+        "GC.F":  "Oro (Gold)",
+        "SI.F":  "Argento (Silver)",
+        "CL.F":  "Petrolio WTI",
+        "NG.F":  "Gas Naturale",
+        "HG.F":  "Rame (Copper)",
+        "PL.F":  "Platino",
+        "PA.F":  "Palladio",
+        "ZW.F":  "Frumento (Wheat)",
+        "ZC.F":  "Mais (Corn)",
+        "ZS.F":  "Soia (Soybeans)",
     }
 
     # Rate limiting for login (per IP)
